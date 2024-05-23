@@ -12,7 +12,6 @@
 #include <cstdint>
 #include <windows.h>
 
-
 #pragma region __CONSOLE__
 
 namespace console
@@ -478,25 +477,47 @@ namespace cmak3
 		bool gcc_installed = !std::system("gcc --version") ? true : false;
 		std::system("cls");
 		if (!gcc_installed)
-			throw "Error: gcc not found!";
+			throw std::format("{}Error:{} gcc not found!",
+				console::fg(console::color::red),
+				console::sgr::reset).c_str();
+
+		// FIXME
+		// Check if cmak3list has been modified ?
 
 		std::vector<std::filesystem::path> objects;
-
+		bool executable_up_to_date = true;
+ 
 		// Get files from each folder
 		for (const auto &folder : project_properties.folders_source)
 		{
 			auto files = utils::get_file_paths(folder, ".cpp");
 
 			// Compile each file
-			for (const auto &file : files)
+			for (const auto &source_path : files)
 			{
-				std::filesystem::path directory_path = file.parent_path();
-				std::filesystem::path file_name = file.stem();
+				std::filesystem::path directory_path = source_path.parent_path();
+				std::filesystem::path file_name = source_path.stem();
 				std::filesystem::path object_path = "build" / std::filesystem::path((directory_path / file_name).generic_string() + ".o").relative_path();
 				objects.push_back(object_path);
 				std::filesystem::create_directories(object_path.parent_path());
-				std::string compile_string = std::format("g++ -c {} -o {}", file.generic_string(), object_path.generic_string());
-				
+
+				// Check if already up to date
+				if (std::filesystem::exists(object_path) and utils::older(source_path, object_path))
+				{
+					std::println("{}Skipping:{} {} {}already up to date{}",
+						console::fg(console::color::yellow_green),
+						console::sgr::reset,
+						object_path.generic_string(),
+						console::fg(console::color::lime_green),
+						console::sgr::reset);
+
+					continue;
+				}
+
+				executable_up_to_date = false;
+
+				// Include directories
+				std::string compile_string = std::format("g++ -c {} -o {}", source_path.generic_string(), object_path.generic_string());
 				for (const auto &i : project_properties.folders_include)
 					compile_string += std::format(" -I {}", i.generic_string());
 
@@ -504,7 +525,9 @@ namespace cmak3
 
 				int code = std::system(compile_string.c_str());
 				if (code)
-					throw "Error: compilation terminated";
+					throw std::format("{}Error:{} compilation terminated",
+						console::fg(console::color::red),
+						console::sgr::reset).c_str();
 			}
 		}
 
@@ -515,9 +538,19 @@ namespace cmak3
 		
 		// FIXME
 		link_string += std::format(" -o build/{}.exe", project_properties.project_name);
-		std::system(link_string.c_str());
 
-		std::println("{}", link_string);
+		if (!executable_up_to_date)
+		{
+			std::println("{}", link_string);
+			std::system(link_string.c_str());
+		}
+		else
+			std::println("{}Skipping linking:{} build/{}.exe {}already up to date{}",
+				console::fg(console::color::yellow_green),
+				console::sgr::reset,
+				project_properties.project_name,
+				console::fg(console::color::lime_green),
+				console::sgr::reset);
 	}
 }
 
