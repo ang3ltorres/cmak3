@@ -461,6 +461,12 @@ namespace cmak3
 
 	cmak3::project_properties read_cmak3_file(const std::filesystem::path &path = "cmak3list")
 	{
+		if (!std::filesystem::exists(path))
+		{
+			std::string error = std::format(" {} File not found", path.generic_string());
+			throw error.c_str();
+		}
+
 		cmak3::project_properties project_properties;
 		auto lines = utils::get_lines(path);
 
@@ -477,9 +483,7 @@ namespace cmak3
 		bool gcc_installed = !std::system("gcc --version") ? true : false;
 		std::system("cls");
 		if (!gcc_installed)
-			throw std::format("{}Error:{} gcc not found!",
-				console::fg(console::color::red),
-				console::sgr::reset).c_str();
+			throw "GCC Not found";
 
 		// FIXME
 		// Check if cmak3list has been modified ?
@@ -525,9 +529,7 @@ namespace cmak3
 
 				int code = std::system(compile_string.c_str());
 				if (code)
-					throw std::format("{}Error:{} compilation terminated",
-						console::fg(console::color::red),
-						console::sgr::reset).c_str();
+					throw "compilation terminated";
 			}
 		}
 
@@ -561,35 +563,46 @@ int main(int argc, char *argv[])
 	auto args = utils::get_args(argc, &argv);
 	console::init();
 
-	switch (args.size())
+	try
 	{
-		// Default
-		case 0:
+		switch (args.size())
 		{
-			try
+			// Default
+			case 0:
 			{
 				auto project_properties = cmak3::read_cmak3_file();
 				cmak3::build(project_properties);
+
+				break;
 			}
-			catch(const char *error) { std::println("{}", error); return 1; }
 
-			break;
-		}
+			case 1:
+			{
+				if (args[0] == "--version" or args[0] == "-v")
+					std::println("{}", messages::version);
+				else if (args[0] == "--help" or args[0] == "-h")
+					std::println("TODO");
+				else if (args[0] == "--v3rsion")
+					messages::print_version_extended();
+				else
+					messages::print_unknown_argument(args[0]);
 
-		case 1:
-		{
-			if (args[0] == "--version" or args[0] == "-v")
-				std::println("{}", messages::version);
-			else if (args[0] == "--help" or args[0] == "-h")
-				std::println("TODO");
-			else if (args[0] == "--v3rsion")
-				messages::print_version_extended();
-			else
-				messages::print_unknown_argument(args[0]);
+				break;
+			}
 
-			break;
+			case 2:
+			{
+				if (args[0] == "-f")
+				{
+					auto project_properties = cmak3::read_cmak3_file(args[1]);
+					cmak3::build(project_properties);
+				}
+
+				break;
+			}
 		}
 	}
+	catch(const char *error) { std::println("{}Error:{}{}", console::fg(console::color::red), console::sgr::reset, error); return 1; }
 
 	return 0;
 }
