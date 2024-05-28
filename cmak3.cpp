@@ -410,6 +410,10 @@ namespace cmak3
 		std::string project_name;
 		std::vector<std::filesystem::path> folders_source;
 		std::vector<std::filesystem::path> folders_include;
+		
+		std::vector<std::string> compiler_flags;
+		std::vector<std::string> link_libs;
+		std::vector<std::string> linker_flags;
 	};
 
 	std::vector<std::string> extract_section(const std::vector<std::string> &lines, const std::string &section_name)
@@ -418,9 +422,11 @@ namespace cmak3
 
 		// Find section
 		auto i = std::find(lines.begin(), lines.end(), "#" + section_name);
-		i++;
+		if (i == lines.end())
+			return section;
 
 		// All lines after that section
+		i++;
 		for (; i != lines.end() and i->operator[](0) != '#' and !utils::empty_string(*i); i++)
 			section.push_back(*i);
 
@@ -457,6 +463,13 @@ namespace cmak3
 			for (const auto &i : section_content)
 				project_properties.folders_include.push_back(i);
 		}
+
+		void flags(const std::vector<std::string> &lines, cmak3::project_properties &project_properties)
+		{
+			project_properties.linker_flags = extract_section(lines, "linker_flags");
+			project_properties.link_libs = extract_section(lines, "link_libs");
+			project_properties.compiler_flags = extract_section(lines, "compiler_flags");
+		}
 	}
 
 	cmak3::project_properties read_cmak3_file(const std::filesystem::path &path = "cmak3list")
@@ -473,6 +486,7 @@ namespace cmak3
 		parse::project(lines, project_properties);
 		parse::source(lines, project_properties);
 		parse::include(lines, project_properties);
+		parse::flags(lines, project_properties);
 
 		return project_properties;
 	}
@@ -489,7 +503,16 @@ namespace cmak3
 		// Check if cmak3list has been modified ?
 
 		std::vector<std::filesystem::path> objects;
-		bool executable_up_to_date = true;
+		std::string binary_name;
+
+		if (!project_properties.is_library)
+			binary_name = std::format("{}.exe", project_properties.project_name);
+		else if (project_properties.is_shared)
+			binary_name = std::format("{}.dll", project_properties.project_name);
+		else
+			binary_name = std::format("{}.a", project_properties.project_name);
+
+		bool binary_up_to_date = std::filesystem::exists(std::format("build/{}", binary_name));
  
 		// Get files from each folder
 		for (const auto &folder : project_properties.folders_source)
@@ -518,12 +541,16 @@ namespace cmak3
 					continue;
 				}
 
-				executable_up_to_date = false;
+				binary_up_to_date = false;
 
 				// Include directories
 				std::string compile_string = std::format("g++ -c {} -o {}", source_path.generic_string(), object_path.generic_string());
 				for (const auto &i : project_properties.folders_include)
 					compile_string += std::format(" -I {}", i.generic_string());
+
+				// Compiler flags
+				for (const auto &i : project_properties.compiler_flags)
+					compile_string += std::format(" -{}", i);
 
 				std::println("{}", compile_string);
 
@@ -534,25 +561,61 @@ namespace cmak3
 		}
 
 		// Link
-		std::string link_string = "g++";
-		for (const auto &i : objects)
-			link_string += std::format(" {}", i.generic_string());
-		
 		// FIXME
-		link_string += std::format(" -o build/{}.exe", project_properties.project_name);
-
-		if (!executable_up_to_date)
+		if (binary_up_to_date)
 		{
+			std::println("{}Skipping linking:{} build/{} {}already up to date{}",
+				console::fg(console::color::yellow_green),
+				console::sgr::reset,
+				binary_name,
+				console::fg(console::color::lime_green),
+				console::sgr::reset);
+		}
+		else
+		{
+			std::string link_string;
+
+			// EXECUTABLE
+			if (!project_properties.is_library)
+			{
+				link_string = "g++";
+
+				for (const auto &i : objects)
+					link_string += std::format(" {}", i.generic_string());
+
+				link_string += std::format(" -o build/{}", binary_name);
+
+				for (const auto &i : project_properties.link_libs)
+					link_string += std::format(" -l{}", i);
+
+				for (const auto &i : project_properties.linker_flags)
+					link_string += std::format(" -{}", i);
+			}
+
+			// SHARED LIBRARY
+			else if (project_properties.is_shared)
+			{
+				link_string = std::format("g++ -o build/{}", binary_name);
+
+				for (const auto &i : objects)
+					link_string += std::format(" {}", i.generic_string());
+
+				link_string += std::format(" -shared -Wl,--subsystem,windows,--out-implib,build/{}.a", binary_name);
+			}
+
+			// STATIC LIBRARY
+			else
+			{
+				link_string = std::format("ar rcs build/{}", binary_name);
+
+				for (const auto &i : objects)
+					link_string += std::format(" {}", i.generic_string());
+			}
+
 			std::println("{}", link_string);
 			std::system(link_string.c_str());
 		}
-		else
-			std::println("{}Skipping linking:{} build/{}.exe {}already up to date{}",
-				console::fg(console::color::yellow_green),
-				console::sgr::reset,
-				project_properties.project_name,
-				console::fg(console::color::lime_green),
-				console::sgr::reset);
+
 	}
 }
 
