@@ -388,7 +388,9 @@ namespace messages
 
 	void print_unknown_argument(const std::string &arg)
 	{
-		std::println("Unknown argument: \"{}\" ", arg);
+		static std::string error;
+		error = std::format("Unknown argument: \"{}\" ", arg);
+		throw error.c_str();
 	}
 }
 
@@ -398,6 +400,7 @@ namespace messages
 
 namespace cmak3
 {
+	// FD
 	struct project_properties
 	{
 		bool is_library;
@@ -414,8 +417,14 @@ namespace cmak3
 		std::vector<std::string> compiler_flags;
 		std::vector<std::string> link_libs;
 		std::vector<std::string> linker_flags;
+
+		std::filesystem::path root_directory;
+		std::vector<project_properties> dependencies;
 	};
 
+	cmak3::project_properties read_cmak3_file(const std::filesystem::path &path);
+
+	// IMP
 	std::vector<std::string> extract_section(const std::vector<std::string> &lines, const std::string &section_name)
 	{
 		std::vector<std::string> section;
@@ -470,23 +479,41 @@ namespace cmak3
 			project_properties.link_libs = extract_section(lines, "link_libs");
 			project_properties.compiler_flags = extract_section(lines, "compiler_flags");
 		}
+
+		void dependencies(const std::vector<std::string> &lines, cmak3::project_properties &project_properties)
+		{
+			auto section_dependencies = extract_section(lines, "dependencies");
+
+			for (const auto &i : section_dependencies)
+			{
+				const auto dependency_properties = read_cmak3_file(project_properties.root_directory / i);
+				std::print("DEPENDENCY FOUND: {}\n", dependency_properties.project_name);
+				for (const auto &j : dependency_properties.folders_source)
+					std::print("FOLDER: {}\n", j.generic_string());
+				project_properties.dependencies.push_back(dependency_properties);
+			}
+			
+		}
 	}
 
-	cmak3::project_properties read_cmak3_file(const std::filesystem::path &path = "cmak3list")
+	cmak3::project_properties read_cmak3_file(const std::filesystem::path &path)
 	{
 		if (!std::filesystem::exists(path))
 		{
-			std::string error = std::format(" {} File not found", path.generic_string());
+			static std::string error;
+			error = std::format("{} File not found", path.generic_string());
 			throw error.c_str();
 		}
 
 		cmak3::project_properties project_properties;
-		auto lines = utils::get_lines(path);
+		project_properties.root_directory = path.parent_path();
 
+		auto lines = utils::get_lines(path);
 		parse::project(lines, project_properties);
 		parse::source(lines, project_properties);
 		parse::include(lines, project_properties);
 		parse::flags(lines, project_properties);
+		parse::dependencies(lines, project_properties);
 
 		return project_properties;
 	}
@@ -494,8 +521,7 @@ namespace cmak3
 	void build(const cmak3::project_properties &project_properties)
 	{
 		// FIXME
-		bool gcc_installed = !std::system("gcc --version") ? true : false;
-		std::system("cls");
+		bool gcc_installed = true;
 		if (!gcc_installed)
 			throw "GCC Not found";
 
@@ -633,7 +659,7 @@ int main(int argc, char *argv[])
 			// Default
 			case 0:
 			{
-				auto project_properties = cmak3::read_cmak3_file();
+				auto project_properties = cmak3::read_cmak3_file(std::filesystem::current_path() / "cmak3list");
 				cmak3::build(project_properties);
 
 				break;
@@ -663,9 +689,12 @@ int main(int argc, char *argv[])
 
 				break;
 			}
+
+			default:
+				throw "unknown arguments";
 		}
 	}
-	catch(const char *error) { std::println("{}Error:{}{}", console::fg(console::color::red), console::sgr::reset, error); return 1; }
+	catch(const char *error) { std::println("{}Error: {}{}", console::fg(console::color::red), console::sgr::reset, error); return 1; }
 
 	return 0;
 }
