@@ -546,9 +546,9 @@ namespace cmak3
 		if (!project_properties.is_library)
 			binary_name = std::format("{}.exe", project_properties.project_name);
 		else if (project_properties.is_shared)
-			binary_name = std::format("{}.dll", project_properties.project_name);
+			binary_name = std::format("lib{}.dll", project_properties.project_name);
 		else
-			binary_name = std::format("{}.a", project_properties.project_name);
+			binary_name = std::format("lib{}.a", project_properties.project_name);
 
 		bool binary_up_to_date = std::filesystem::exists(main_root_directory / "build" / binary_name);
  
@@ -562,7 +562,7 @@ namespace cmak3
 			{
 				std::filesystem::path directory_path = source_path.parent_path();
 				std::filesystem::path file_name = source_path.stem();
-				std::filesystem::path object_path = main_root_directory / "build" / std::filesystem::path(file_name.generic_string() + ".o");
+				std::filesystem::path object_path = main_root_directory / "build" / project_properties.project_name / folder / std::filesystem::path(file_name.generic_string() + ".o");
 				objects.push_back(object_path);
 				std::filesystem::create_directories(object_path.parent_path());
 
@@ -624,6 +624,7 @@ namespace cmak3
 					link_string += std::format(" {}", i.generic_string());
 
 				link_string += std::format(" -o {}/build/{}", main_root_directory.generic_string(), binary_name);
+				link_string += " -L build";
 
 				for (const auto &i : project_properties.link_libs)
 					link_string += std::format(" -l{}", i);
