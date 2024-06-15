@@ -334,9 +334,8 @@ namespace utils
 
 namespace messages
 {
-	// const std::string version = "cmak3 version 0.1\n2024";
 	const std::string version = "cmak3 version 0.1\n2024";
-	
+
 	void print_version_extended()
 	{
 		static const std::vector<std::string> rows =
@@ -400,6 +399,9 @@ namespace messages
 
 namespace cmak3
 {
+	// GLOBAL
+	std::filesystem::path main_root_directory;
+
 	// FD
 	struct project_properties
 	{
@@ -423,6 +425,7 @@ namespace cmak3
 	};
 
 	cmak3::project_properties read_cmak3_file(const std::filesystem::path &path);
+	void build(const cmak3::project_properties &project_properties);
 
 	// IMP
 	std::vector<std::string> extract_section(const std::vector<std::string> &lines, const std::string &section_name)
@@ -483,16 +486,17 @@ namespace cmak3
 		void dependencies(const std::vector<std::string> &lines, cmak3::project_properties &project_properties)
 		{
 			auto section_dependencies = extract_section(lines, "dependencies");
+			if (section_dependencies.empty())
+				return;
 
+			std::print("Found dependencies\n");
 			for (const auto &i : section_dependencies)
 			{
 				const auto dependency_properties = read_cmak3_file(project_properties.root_directory / i);
-				std::print("DEPENDENCY FOUND: {}\n", dependency_properties.project_name);
-				for (const auto &j : dependency_properties.folders_source)
-					std::print("FOLDER: {}\n", j.generic_string());
 				project_properties.dependencies.push_back(dependency_properties);
+				std::print("- {}\n", dependency_properties.project_name);
 			}
-			
+			std::print("\n");
 		}
 	}
 
@@ -520,6 +524,15 @@ namespace cmak3
 
 	void build(const cmak3::project_properties &project_properties)
 	{
+		std::print("Compiling {}{}{}\n", console::fg(console::color::yellow), project_properties.project_name, console::sgr::reset);
+
+		if (!project_properties.dependencies.empty())
+		{
+			std::print("Compiling dependencies\n");
+			for (const auto &i : project_properties.dependencies)
+				cmak3::build(i);
+		}
+
 		// FIXME
 		bool gcc_installed = true;
 		if (!gcc_installed)
@@ -527,7 +540,6 @@ namespace cmak3
 
 		// FIXME
 		// Check if cmak3list has been modified ?
-
 		std::vector<std::filesystem::path> objects;
 		std::string binary_name;
 
@@ -538,19 +550,19 @@ namespace cmak3
 		else
 			binary_name = std::format("{}.a", project_properties.project_name);
 
-		bool binary_up_to_date = std::filesystem::exists(std::format("build/{}", binary_name));
+		bool binary_up_to_date = std::filesystem::exists(main_root_directory / "build" / binary_name);
  
 		// Get files from each folder
 		for (const auto &folder : project_properties.folders_source)
 		{
-			auto files = utils::get_file_paths(folder, ".cpp");
+			auto files = utils::get_file_paths(project_properties.root_directory / folder, ".cpp");
 
 			// Compile each file
 			for (const auto &source_path : files)
 			{
 				std::filesystem::path directory_path = source_path.parent_path();
 				std::filesystem::path file_name = source_path.stem();
-				std::filesystem::path object_path = "build" / std::filesystem::path((directory_path / file_name).generic_string() + ".o").relative_path();
+				std::filesystem::path object_path = main_root_directory / "build" / std::filesystem::path(file_name.generic_string() + ".o");
 				objects.push_back(object_path);
 				std::filesystem::create_directories(object_path.parent_path());
 
@@ -568,11 +580,12 @@ namespace cmak3
 				}
 
 				binary_up_to_date = false;
+				std::string compile_string;
 
 				// Include directories
-				std::string compile_string = std::format("g++ -c {} -o {}", source_path.generic_string(), object_path.generic_string());
+				compile_string = std::format("g++ -c {} -o {}", source_path.generic_string(), object_path.generic_string());
 				for (const auto &i : project_properties.folders_include)
-					compile_string += std::format(" -I {}", i.generic_string());
+					compile_string += std::format(" -I {}", std::filesystem::path(project_properties.root_directory / i).generic_string());
 
 				// Compiler flags
 				for (const auto &i : project_properties.compiler_flags)
@@ -590,9 +603,10 @@ namespace cmak3
 		// FIXME
 		if (binary_up_to_date)
 		{
-			std::println("{}Skipping linking:{} build/{} {}already up to date{}",
+			std::println("{}Skipping linking:{} {}build/{} {}already up to date{}",
 				console::fg(console::color::yellow_green),
 				console::sgr::reset,
+				cmak3::main_root_directory.generic_string(),
 				binary_name,
 				console::fg(console::color::lime_green),
 				console::sgr::reset);
@@ -609,7 +623,7 @@ namespace cmak3
 				for (const auto &i : objects)
 					link_string += std::format(" {}", i.generic_string());
 
-				link_string += std::format(" -o build/{}", binary_name);
+				link_string += std::format(" -o {}/build/{}", main_root_directory.generic_string(), binary_name);
 
 				for (const auto &i : project_properties.link_libs)
 					link_string += std::format(" -l{}", i);
@@ -621,7 +635,7 @@ namespace cmak3
 			// SHARED LIBRARY
 			else if (project_properties.is_shared)
 			{
-				link_string = std::format("g++ -o build/{}", binary_name);
+				link_string = std::format("g++ -o {}/build/{}", main_root_directory.generic_string(), binary_name);
 
 				for (const auto &i : objects)
 					link_string += std::format(" {}", i.generic_string());
@@ -632,7 +646,7 @@ namespace cmak3
 			// STATIC LIBRARY
 			else
 			{
-				link_string = std::format("ar rcs build/{}", binary_name);
+				link_string = std::format("ar rcs {}/build/{}", main_root_directory.generic_string(), binary_name);
 
 				for (const auto &i : objects)
 					link_string += std::format(" {}", i.generic_string());
@@ -659,6 +673,7 @@ int main(int argc, char *argv[])
 			// Default
 			case 0:
 			{
+				cmak3::main_root_directory = std::filesystem::current_path();
 				auto project_properties = cmak3::read_cmak3_file(std::filesystem::current_path() / "cmak3list");
 				cmak3::build(project_properties);
 
@@ -683,6 +698,7 @@ int main(int argc, char *argv[])
 			{
 				if (args[0] == "-f")
 				{
+					cmak3::main_root_directory = args[1];
 					auto project_properties = cmak3::read_cmak3_file(args[1]);
 					cmak3::build(project_properties);
 				}
