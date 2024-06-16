@@ -401,6 +401,7 @@ namespace cmak3
 {
 	// GLOBAL
 	std::filesystem::path main_root_directory;
+	bool verbose = false;
 
 	// FD
 	struct project_properties
@@ -590,8 +591,12 @@ namespace cmak3
 				// Compiler flags
 				for (const auto &i : project_properties.compiler_flags)
 					compile_string += std::format(" -{}", i);
+				
+				// Verbose
+				// std::println("{}", compile_string);
 
-				std::println("{}", compile_string);
+				std::string object_name = (project_properties.project_name / folder / std::filesystem::path(file_name.generic_string() + ".o")).generic_string();
+				std::print("Compiling {}{}{}\n", console::fg(console::color::green), object_name, console::sgr::reset);
 
 				int code = std::system(compile_string.c_str());
 				if (code)
@@ -618,6 +623,7 @@ namespace cmak3
 			// EXECUTABLE
 			if (!project_properties.is_library)
 			{
+				std::print("Linking executable {}{}{}\n", console::fg(console::color::blue), binary_name, console::sgr::reset);
 				link_string = "g++";
 
 				for (const auto &i : objects)
@@ -636,6 +642,7 @@ namespace cmak3
 			// SHARED LIBRARY
 			else if (project_properties.is_shared)
 			{
+				std::print("Linking shared library {}{}{}\n", console::fg(console::color::blue), binary_name, console::sgr::reset);
 				link_string = std::format("g++ -o {}/build/{}", main_root_directory.generic_string(), binary_name);
 
 				for (const auto &i : objects)
@@ -647,16 +654,18 @@ namespace cmak3
 			// STATIC LIBRARY
 			else
 			{
+				std::print("Linking static library {}{}{}\n", console::fg(console::color::blue), binary_name, console::sgr::reset);
 				link_string = std::format("ar rcs {}/build/{}", main_root_directory.generic_string(), binary_name);
 
 				for (const auto &i : objects)
 					link_string += std::format(" {}", i.generic_string());
 			}
 
-			std::println("{}", link_string);
+			// Verbose
+			// std::println("{}", link_string);
+
 			std::system(link_string.c_str());
 		}
-
 	}
 }
 
