@@ -358,7 +358,7 @@ namespace messages
 
 		std::random_device rd;
 		std::default_random_engine gen(rd());
-		static std::uniform_int_distribution<uint32_t> dist(0, static_cast<uint32_t>(console::color::yellow_green) + 1);
+		static std::uniform_int_distribution<uint32_t> dist(0, static_cast<uint32_t>(console::color::green) + 1);
 
 		// Hide the console cursor
 		CONSOLE_CURSOR_INFO cursorInfo;
@@ -401,7 +401,6 @@ namespace cmak3
 {
 	// GLOBAL
 	std::filesystem::path main_root_directory;
-	bool verbose = false;
 
 	// FD
 	struct project_properties
@@ -564,6 +563,7 @@ namespace cmak3
 				std::filesystem::path directory_path = source_path.parent_path();
 				std::filesystem::path file_name = source_path.stem();
 				std::filesystem::path object_path = main_root_directory / "build" / project_properties.project_name / folder / std::filesystem::path(file_name.generic_string() + ".o");
+				std::string object_name = (project_properties.project_name / folder / std::filesystem::path(file_name.generic_string() + ".o")).generic_string();
 				objects.push_back(object_path);
 				std::filesystem::create_directories(object_path.parent_path());
 
@@ -571,10 +571,10 @@ namespace cmak3
 				if (std::filesystem::exists(object_path) and utils::older(source_path, object_path))
 				{
 					std::println("{}Skipping:{} {} {}already up to date{}",
-						console::fg(console::color::yellow_green),
+						console::fg(console::color::green),
 						console::sgr::reset,
-						object_path.generic_string(),
-						console::fg(console::color::lime_green),
+						object_name,
+						console::fg(console::color::cyan),
 						console::sgr::reset);
 
 					continue;
@@ -595,7 +595,6 @@ namespace cmak3
 				// Verbose
 				// std::println("{}", compile_string);
 
-				std::string object_name = (project_properties.project_name / folder / std::filesystem::path(file_name.generic_string() + ".o")).generic_string();
 				std::print("Compiling {}{}{}\n", console::fg(console::color::green), object_name, console::sgr::reset);
 
 				int code = std::system(compile_string.c_str());
@@ -608,12 +607,11 @@ namespace cmak3
 		// FIXME
 		if (binary_up_to_date)
 		{
-			std::println("{}Skipping linking:{} {}build/{} {}already up to date{}",
-				console::fg(console::color::yellow_green),
+			std::println("{}Skipping linking:{} {} {}already up to date{}",
+				console::fg(console::color::green),
 				console::sgr::reset,
-				cmak3::main_root_directory.generic_string(),
 				binary_name,
-				console::fg(console::color::lime_green),
+				console::fg(console::color::cyan),
 				console::sgr::reset);
 		}
 		else
@@ -623,7 +621,7 @@ namespace cmak3
 			// EXECUTABLE
 			if (!project_properties.is_library)
 			{
-				std::print("Linking executable {}{}{}\n", console::fg(console::color::blue), binary_name, console::sgr::reset);
+				std::print("Linking executable {}{}{}\n", console::fg(console::color::cyan), binary_name, console::sgr::reset);
 				link_string = "g++";
 
 				for (const auto &i : objects)
@@ -642,7 +640,7 @@ namespace cmak3
 			// SHARED LIBRARY
 			else if (project_properties.is_shared)
 			{
-				std::print("Linking shared library {}{}{}\n", console::fg(console::color::blue), binary_name, console::sgr::reset);
+				std::print("Linking shared library {}{}{}\n", console::fg(console::color::cyan), binary_name, console::sgr::reset);
 				link_string = std::format("g++ -o {}/build/{}", main_root_directory.generic_string(), binary_name);
 
 				for (const auto &i : objects)
@@ -654,7 +652,7 @@ namespace cmak3
 			// STATIC LIBRARY
 			else
 			{
-				std::print("Linking static library {}{}{}\n", console::fg(console::color::blue), binary_name, console::sgr::reset);
+				std::print("Linking static library {}{}{}\n", console::fg(console::color::cyan), binary_name, console::sgr::reset);
 				link_string = std::format("ar rcs {}/build/{}", main_root_directory.generic_string(), binary_name);
 
 				for (const auto &i : objects)
